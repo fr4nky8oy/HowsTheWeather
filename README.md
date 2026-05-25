@@ -16,7 +16,7 @@ Constable provided the conceptual frame. Clouds provided the granular voice. Ope
 
 Audio flows through a circular buffer, gets sliced into 32 simultaneous grains, and recombines through diffusion, FDN reverb, and an equal-power dry/wet crossfade — classic Clouds-style granular processing.
 
-When weather mode is on, real-time data fetched from your chosen latitude/longitude (every 5 minutes, slew-interpolated for smoothness) adds bipolar offsets to five knobs:
+Real-time data fetched from your chosen pin location (every 5 minutes, slew-interpolated for smoothness) adds bipolar offsets to five knobs, scaled by the **Weather Amount** knob:
 
 | Weather | Modulates | Range |
 |---|---|---|
@@ -32,15 +32,17 @@ Offsets are additive — your knob position is never overwritten, weather just n
 
 ## Features
 
-- **Granular engine**: 32 simultaneous grains, per-grain position / size / pitch / window / stereo spread
-- **Pitch shifting**: ±24 semitones
-- **Freeze**: stops buffer writing, loops the captured content indefinitely
-- **Post-grain diffusion** (texture-driven) and **FDN reverb** (Clouds-style)
-- **Weather modulation** with independent toggles for DSP routing and GUI visuals
-- **Live WebView GUI** with optional weather-driven background gradient and wind particles
-- **6 factory presets**: Default, Ambient Drift, Weather Storm, Frozen Clouds, Gentle Rain, Shimmer Breeze
-
 ![Params drawer — all DSP knobs with amber arcs showing live weather modulation](Pic/Pic2.jpg)
+
+The interface has two views: a **globe view** (main screen) and a **params drawer** (toggle with `Params` bottom-right). What's in each:
+
+- **Grain Field** — Position, Size, Density, Texture
+- **Cloud Tail** — Pitch (±24 semitones), Feedback, Dry/Wet, Spread, Reverb
+- **Weather** — a single **Amount** knob scales how strongly live weather modulates the five mapped knobs; amber arcs on each affected knob show the current modulation depth in real time
+- **Freeze** (bottom-left) — locks the grain buffer: the engine keeps reading what's already captured but stops writing new audio
+- **Globe** — drag to spin, double-click to drop a pin anywhere on Earth; that location's live weather drives the modulation
+- **Preset manager** — save, load, and step through your own presets (no factory presets bundled)
+- **Weather-driven visuals** — background gradient and effects respond to the current weather at your pin
 
 ## System Requirements
 

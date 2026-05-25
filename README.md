@@ -1,5 +1,7 @@
 # HowsTheWeather
 
+![HowsTheWeather main view](Pic/Pic1.jpg)
+
 A granular audio effect plugin that listens to the real world. Live weather data — wind, clouds, pressure, temperature, humidity — modulates the granular engine in real time, turning your audio into a slowly-evolving response to whatever the sky is doing outside.
 
 ## Inspiration
@@ -22,6 +24,8 @@ When weather mode is on, real-time data fetched from your chosen latitude/longit
 
 Offsets are additive — your knob position is never overwritten, weather just nudges it. Feedback, dry/wet, spread, reverb, and freeze stay entirely under your control.
 
+![Built-in "What's This?" info panel](Pic/pic3.jpg)
+
 ## Features
 
 - **Granular engine**: 32 simultaneous grains, per-grain position / size / pitch / window / stereo spread
@@ -31,6 +35,8 @@ Offsets are additive — your knob position is never overwritten, weather just n
 - **Weather modulation** with independent toggles for DSP routing and GUI visuals
 - **Live WebView GUI** with optional weather-driven background gradient and wind particles
 - **6 factory presets**: Default, Ambient Drift, Weather Storm, Frozen Clouds, Gentle Rain, Shimmer Breeze
+
+![Params drawer — all DSP knobs with amber arcs showing live weather modulation](Pic/Pic2.jpg)
 
 ## System Requirements
 

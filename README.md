@@ -94,6 +94,17 @@ cmake --build build
 
 `COPY_PLUGIN_AFTER_BUILD` is on by default — the build will install the AU and VST3 to `~/Library/Audio/Plug-Ins/` automatically.
 
+## Dependencies & Credits
+
+HowsTheWeather stands on the shoulders of open-source giants:
+
+- **[Mutable Instruments Clouds](https://github.com/pichenettes/eurorack/tree/master/clouds)** by Émilie Gillet — the granular engine (audio buffer, grain player, diffusion network, FDN reverb) descends directly from the open-source Clouds firmware. MIT license.
+- **[JUCE](https://juce.com/)** — the cross-platform C++ framework powering the AU / VST3 / Standalone builds.
+- **[Cobe](https://github.com/shuding/cobe)** by Shu Ding — the interactive WebGL globe (~12 KB) used as the location picker. MIT license.
+- **[Open-Meteo](https://open-meteo.com/)** — the free, no-API-key weather data service that drives the modulation. CC BY 4.0 data licensing.
+
+Thanks to all the maintainers and contributors who made these available.
+
 ## Changelog
 
 See [CHANGELOG.md](CHANGELOG.md) for the full release history.

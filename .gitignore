@@ -1,0 +1,24 @@
+# Build artifacts
+build/
+Builds/
+.cache/
+
+# IDE / OS
+.vscode/
+.vs/
+.idea/
+*.xcodeproj/
+.DS_Store
+.AppleDouble
+
+# Compiled
+*.o
+*.obj
+*.d
+*.a
+*.dylib
+*.so
+*.dll
+
+# Keep the release zip even though we ignore loose binaries elsewhere
+!Release/*.zip

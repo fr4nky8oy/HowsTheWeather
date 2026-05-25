@@ -1,0 +1,41 @@
+HowsTheWeather v1.4.15 — Install Instructions (macOS)
+=======================================================
+
+This bundle contains three formats. Install whichever you need.
+
+1. AU (for Logic Pro, GarageBand, MainStage, etc.)
+     copy   AU/HowsTheWeather.component
+     into   ~/Library/Audio/Plug-Ins/Components/
+
+2. VST3 (for Ableton Live, Cubase, Reaper, Studio One, etc.)
+     copy   VST3/HowsTheWeather.vst3
+     into   ~/Library/Audio/Plug-Ins/VST3/
+
+3. Standalone (no DAW needed)
+     drag   Standalone/HowsTheWeather.app
+     to     /Applications/   (or run from anywhere)
+
+
+First launch — Gatekeeper warning
+---------------------------------
+The bundles aren't code-signed yet, so macOS will block them the first time.
+
+Easy fix:
+  Right-click the bundle -> Open -> click "Open" in the warning dialog.
+  macOS remembers your approval.
+
+Terminal fix (clears the quarantine flag in one shot):
+  xattr -d com.apple.quarantine ~/Library/Audio/Plug-Ins/VST3/HowsTheWeather.vst3
+  xattr -d com.apple.quarantine ~/Library/Audio/Plug-Ins/Components/HowsTheWeather.component
+  xattr -d com.apple.quarantine /Applications/HowsTheWeather.app
+
+
+After install
+-------------
+Restart your DAW and rescan plugins. HowsTheWeather appears under "Franky".
+
+
+Source code and full changelog:
+  https://github.com/fr4nky8oy/HowsTheWeather
+
+License: MIT (see LICENSE.txt)

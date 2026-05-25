@@ -1,0 +1,1295 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>HowsTheWeather</title>
+    <style>
+        html, body {
+            margin: 0;
+            padding: 0;
+            height: 100%;
+            overflow: hidden;
+        }
+        body {
+            user-select: none;
+            -webkit-user-select: none;
+            -webkit-tap-highlight-color: transparent;
+            cursor: default;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            --bg-hue1: 220;
+            --bg-hue2: 230;
+            --bg-sat: 40;
+            --bg-light1: 12;
+            --bg-light2: 18;
+            background: linear-gradient(135deg,
+                hsl(var(--bg-hue1), calc(var(--bg-sat) * 1%), calc(var(--bg-light1) * 1%)) 0%,
+                hsl(var(--bg-hue2), calc(var(--bg-sat) * 1%), calc(var(--bg-light2) * 1%)) 100%);
+            color: #fff;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: flex-start;
+        }
+        *, *::before, *::after { box-sizing: border-box; }
+
+        #cloud-canvas {
+            position: absolute;
+            top: 0; left: 0;
+            width: 100%; height: 100%;
+            pointer-events: none;
+            z-index: 0;
+        }
+        #weather-fx {
+            position: absolute;
+            top: 0; left: 0;
+            width: 100%; height: 100%;
+            pointer-events: none;
+            z-index: 1;
+        }
+        #title {
+            position: absolute;
+            top: 14px;
+            left: 16px;
+            font-size: 16px;
+            font-weight: 300;
+            letter-spacing: 1px;
+            text-shadow: 0 1px 4px rgba(0,0,0,0.3);
+            opacity: 0.85;
+            z-index: 20;
+        }
+        #globe-wrap {
+            flex: 0 0 auto;
+            display: flex;
+            align-items: flex-start;
+            justify-content: center;
+            padding-top: 10px;
+            min-height: 0;
+            overflow: hidden;
+            position: relative;
+            z-index: 5;
+        }
+        #globe-wrap > div {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            pointer-events: none;
+        }
+        #globe-canvas {
+            touch-action: none;
+            pointer-events: none;
+        }
+        #info-area {
+            position: absolute;
+            bottom: 48px;
+            left: 0;
+            right: 0;
+            text-align: center;
+            padding: 0 16px;
+            z-index: 5;
+        }
+        #location-label {
+            font-size: 18px;
+            font-weight: 500;
+            letter-spacing: 0.5px;
+            text-shadow: 0 1px 6px rgba(0,0,0,0.4);
+            opacity: 0;
+            transition: opacity 0.6s ease;
+        }
+        #location-label.visible { opacity: 1; }
+        #weather-info {
+            margin-top: 2px;
+            font-size: 11px;
+            font-weight: 300;
+            opacity: 0.7;
+            letter-spacing: 0.3px;
+        }
+        #hint {
+            margin-top: 2px;
+            font-size: 10px;
+            opacity: 0.4;
+            pointer-events: none;
+            transition: opacity 1s ease;
+        }
+        #hint.hidden { opacity: 0; }
+
+        .pill-btn {
+            position: absolute;
+            background: rgba(255,255,255,0.15);
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+            border: 1px solid rgba(255,255,255,0.25);
+            border-radius: 8px;
+            color: #fff;
+            font-size: 12px;
+            font-weight: 500;
+            padding: 6px 14px;
+            cursor: pointer;
+            letter-spacing: 0.5px;
+            transition: background 0.2s, transform 0.2s;
+            z-index: 20;
+        }
+        .pill-btn:hover { background: rgba(255,255,255,0.25); }
+        .pill-btn.open { /* no transform — keep aligned with freeze */ }
+        .pill-btn.active {
+            background: rgba(100,200,255,0.35);
+            border-color: rgba(100,200,255,0.5);
+        }
+        #params-toggle { bottom: 14px; right: 16px; min-width: 70px; text-align: center; }
+        #freeze-toggle { bottom: 14px; left: 16px; }
+        #info-toggle { top: 14px; right: 16px; }
+
+        /* Params drawer — compact, stops above freeze button */
+        #params-drawer {
+            position: absolute;
+            bottom: 0; left: 0; right: 0;
+            background: rgba(0,0,0,0.65);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            border-top: 1px solid rgba(255,255,255,0.15);
+            transform: translateY(100%);
+            transition: transform 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+            z-index: 15;
+            padding: 14px 14px 52px;
+        }
+        #params-drawer.open { transform: translateY(0); }
+
+        /* Drawer content row: Grain Field | divider | Cloud Tail | divider | Weather */
+        .drawer-content {
+            display: flex;
+            align-items: flex-start;
+            justify-content: space-between;
+        }
+        .drawer-section { flex-shrink: 0; }
+        .drawer-divider {
+            width: 1px;
+            align-self: stretch;
+            background: rgba(255,255,255,0.15);
+            flex-shrink: 0;
+        }
+        .drawer-weather {
+            flex-shrink: 0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding-top: 0;
+        }
+        .drawer-weather .drawer-section-title {
+            margin-bottom: 4px;
+        }
+
+        .drawer-section-title {
+            font-size: 9px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 1.5px;
+            opacity: 0.5;
+            margin-bottom: 4px;
+        }
+        .drawer-knobs {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
+        }
+        .knob-container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            width: 46px;
+        }
+        .knob-container canvas { cursor: pointer; }
+        .knob-label {
+            font-size: 8px;
+            opacity: 0.6;
+            margin-top: 2px;
+            text-align: center;
+            white-space: nowrap;
+        }
+        .knob-value {
+            font-size: 9px;
+            opacity: 0.8;
+            font-variant-numeric: tabular-nums;
+        }
+
+        /* Info panel */
+        #info-panel {
+            position: absolute;
+            top: 0; left: 0; right: 0;
+            background: rgba(0,0,0,0.65);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            border-bottom: 1px solid rgba(255,255,255,0.15);
+            transform: translateY(-100%);
+            transition: transform 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+            z-index: 15;
+            padding: 44px 20px 20px;
+            max-height: calc(100% - 80px);
+            overflow-y: auto;
+            -webkit-overflow-scrolling: touch;
+        }
+        #info-panel.open { transform: translateY(0); }
+        #info-panel h3 { font-size: 14px; font-weight: 600; margin: 0 0 10px; letter-spacing: 0.5px; }
+        #info-panel p { font-size: 12px; font-weight: 300; line-height: 1.6; margin: 0 0 10px; opacity: 0.85; }
+        #info-panel .info-section { margin-bottom: 12px; }
+        #info-panel .info-label { font-size: 9px; font-weight: 600; text-transform: uppercase; letter-spacing: 1.5px; opacity: 0.5; margin-bottom: 4px; }
+
+        /* Preset bar — sits at bottom between Freeze and Close pill buttons */
+        .preset-bar {
+            position: absolute;
+            bottom: 14px;
+            left: 100px;
+            right: 100px;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            gap: 4px;
+            z-index: 20;
+        }
+        .preset-bar.visible { display: flex; }
+        .preset-btn {
+            background: rgba(255,255,255,0.15);
+            border: 1px solid rgba(255,255,255,0.25);
+            border-radius: 6px;
+            color: #fff;
+            font-size: 11px;
+            padding: 4px 10px;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+        .preset-btn:hover { background: rgba(255,255,255,0.25); }
+        .preset-select {
+            flex: 0 0 auto;
+            width: 150px;
+            background: rgba(255,255,255,0.1);
+            border: 1px solid rgba(255,255,255,0.25);
+            border-radius: 6px;
+            color: #fff;
+            font-size: 11px;
+            padding: 4px 8px;
+            outline: none;
+            cursor: pointer;
+        }
+        .preset-select option { background: #222; color: #fff; }
+        .preset-input {
+            flex: 0 0 auto;
+            width: 150px;
+            background: rgba(255,255,255,0.1);
+            border: 1px solid rgba(255,255,255,0.25);
+            border-radius: 6px;
+            color: #fff;
+            font-size: 11px;
+            padding: 4px 8px;
+            outline: none;
+        }
+        .preset-input::placeholder { color: rgba(255,255,255,0.4); }
+        .preset-bar.saving .preset-select,
+        .preset-bar.saving #preset-prev,
+        .preset-bar.saving #preset-next { display: none; }
+        .preset-bar:not(.saving) .preset-input,
+        .preset-bar:not(.saving) #preset-confirm,
+        .preset-bar:not(.saving) #preset-cancel { display: none; }
+
+        /* Bug-report UI inside info panel */
+        #bug-report-section { margin-top: 8px; }
+        #bug-report-form { display: none; flex-direction: column; gap: 8px; margin-top: 8px; }
+        #bug-report-form.open { display: flex; }
+        #bug-report-thanks {
+            display: none;
+            margin-top: 8px;
+            padding: 8px 12px;
+            background: rgba(100,200,255,0.2);
+            border: 1px solid rgba(100,200,255,0.4);
+            border-radius: 6px;
+            font-size: 12px;
+            color: #fff;
+        }
+        #bug-report-thanks.open { display: block; }
+        #bug-report-text {
+            width: 100%;
+            min-height: 80px;
+            background: rgba(255,255,255,0.08);
+            border: 1px solid rgba(255,255,255,0.2);
+            border-radius: 6px;
+            color: #fff;
+            font-size: 12px;
+            font-family: inherit;
+            padding: 8px;
+            resize: vertical;
+            outline: none;
+            box-sizing: border-box;
+        }
+        .bug-report-actions { display: flex; gap: 8px; }
+    </style>
+</head>
+<body>
+    <canvas id="cloud-canvas"></canvas>
+    <canvas id="weather-fx"></canvas>
+
+    <div id="title">How's The Weather</div>
+
+    <div id="globe-wrap">
+        <canvas id="globe-canvas"></canvas>
+    </div>
+
+    <div id="info-area">
+        <div id="location-label"></div>
+        <div id="weather-info"></div>
+        <div id="hint">Double-click the globe to pick a location</div>
+    </div>
+
+    <button class="pill-btn" id="info-toggle">What's This?</button>
+    <button class="pill-btn" id="freeze-toggle">Freeze</button>
+    <button class="pill-btn" id="params-toggle">Params</button>
+
+    <div id="info-panel">
+        <div class="info-section">
+            <div class="info-label">What It Does</div>
+            <p>This plugin turns real-world weather into sound. Pick any location on the globe and live weather data shapes your audio through granular synthesis.</p>
+        </div>
+        <div class="info-section">
+            <div class="info-label">How To Use</div>
+            <p>Double-click the globe to drop a pin. Weather data modulates the sound automatically. Drag to spin. The background reflects time of day at your location. Rain, wind, and clouds appear as visual effects.</p>
+        </div>
+        <div class="info-section">
+            <div class="info-label">Weather Mappings</div>
+            <p>Wind controls grain size. Clouds drive density. Pressure shifts pitch. Temperature scrubs position. Humidity shapes texture. Amount scales the overall modulation depth.</p>
+        </div>
+        <div class="info-section">
+            <div class="info-label">Controls</div>
+            <p>Freeze (bottom-left) locks the grain buffer. Params drawer has all DSP knobs with amber arcs showing weather modulation. Amount (top-right of drawer) scales modulation depth.</p>
+        </div>
+        <div id="bug-report-section">
+            <button class="preset-btn" id="bug-report-toggle">Report Bug</button>
+            <div id="bug-report-form">
+                <textarea id="bug-report-text" placeholder="Describe the bug..."></textarea>
+                <div class="bug-report-actions">
+                    <button class="preset-btn" id="bug-report-send">Send</button>
+                    <button class="preset-btn" id="bug-report-cancel">Cancel</button>
+                </div>
+            </div>
+            <div id="bug-report-thanks">Thanks for feedback!</div>
+        </div>
+    </div>
+
+    <div id="params-drawer">
+        <div class="drawer-content">
+            <div class="drawer-section">
+                <div class="drawer-section-title">Grain Field</div>
+                <div class="drawer-knobs">
+                    <div class="knob-container">
+                        <canvas id="knob-position" width="36" height="36"></canvas>
+                        <div class="knob-value" id="val-position">0.10</div>
+                        <div class="knob-label">Position</div>
+                    </div>
+                    <div class="knob-container">
+                        <canvas id="knob-size" width="36" height="36"></canvas>
+                        <div class="knob-value" id="val-size">0.93</div>
+                        <div class="knob-label">Size</div>
+                    </div>
+                    <div class="knob-container">
+                        <canvas id="knob-density" width="36" height="36"></canvas>
+                        <div class="knob-value" id="val-density">0.83</div>
+                        <div class="knob-label">Density</div>
+                    </div>
+                    <div class="knob-container">
+                        <canvas id="knob-texture" width="36" height="36"></canvas>
+                        <div class="knob-value" id="val-texture">0.87</div>
+                        <div class="knob-label">Texture</div>
+                    </div>
+                </div>
+            </div>
+            <div class="drawer-divider"></div>
+            <div class="drawer-section">
+                <div class="drawer-section-title">Cloud Tail</div>
+                <div class="drawer-knobs">
+                    <div class="knob-container">
+                        <canvas id="knob-pitch" width="36" height="36"></canvas>
+                        <div class="knob-value" id="val-pitch">-4.6 st</div>
+                        <div class="knob-label">Pitch</div>
+                    </div>
+                    <div class="knob-container">
+                        <canvas id="knob-feedback" width="36" height="36"></canvas>
+                        <div class="knob-value" id="val-feedback">0.70</div>
+                        <div class="knob-label">Feedback</div>
+                    </div>
+                    <div class="knob-container">
+                        <canvas id="knob-drywet" width="36" height="36"></canvas>
+                        <div class="knob-value" id="val-drywet">1.00</div>
+                        <div class="knob-label">Dry/Wet</div>
+                    </div>
+                    <div class="knob-container">
+                        <canvas id="knob-spread" width="36" height="36"></canvas>
+                        <div class="knob-value" id="val-spread">0.82</div>
+                        <div class="knob-label">Spread</div>
+                    </div>
+                    <div class="knob-container">
+                        <canvas id="knob-reverb" width="36" height="36"></canvas>
+                        <div class="knob-value" id="val-reverb">0.32</div>
+                        <div class="knob-label">Reverb</div>
+                    </div>
+                </div>
+            </div>
+            <div class="drawer-divider"></div>
+            <div class="drawer-weather">
+                <div class="drawer-section-title">Weather</div>
+                <div class="knob-container">
+                    <canvas id="knob-weather_amount" width="36" height="36"></canvas>
+                    <div class="knob-value" id="val-weather_amount">1.00</div>
+                    <div class="knob-label">Amount</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="preset-bar" id="preset-bar">
+        <select class="preset-select" id="preset-select"></select>
+        <input class="preset-input" id="preset-input" type="text" placeholder="Preset name" maxlength="40">
+        <button class="preset-btn" id="preset-prev">◀</button>
+        <button class="preset-btn" id="preset-next">▶</button>
+        <button class="preset-btn" id="preset-save">Save</button>
+        <button class="preset-btn" id="preset-confirm">OK</button>
+        <button class="preset-btn" id="preset-cancel">✕</button>
+    </div>
+
+    <script src="/js/juce/check_native_interop.js"></script>
+    <script type="module">
+        import * as Juce from "/js/juce/index.js";
+        import createGlobe from "/js/cobe.js";
+
+        // ================================================================
+        // GLOBE STATE
+        // ================================================================
+        const canvas = document.getElementById("globe-canvas");
+        let phi = 0;
+        let currentTheta = 0.3;
+        let currentMarkers = [];
+        let globe = null;
+        let autoRotate = true;
+        let isDragging = false;
+        let pointerX = 0;
+
+        let globeConfig = {
+            dark: 0,
+            baseColor: [0.7, 0.85, 1],
+            glowColor: [0.7, 0.85, 1],
+            markerColor: [0.2, 0.5, 1],
+        };
+
+        const latState = Juce.getSliderState("weather_lat");
+        const lonState = Juce.getSliderState("weather_lon");
+
+        // ================================================================
+        // GLOBE INIT
+        // ================================================================
+        const globeWrap = document.getElementById("globe-wrap");
+
+        function getGlobeSize() {
+            const availH = window.innerHeight - 90;
+            const availW = window.innerWidth - 40;
+            return Math.max(200, Math.floor(Math.min(availW, availH)));
+        }
+
+        function cleanupCobeWrapper() {
+            while (canvas.parentElement && canvas.parentElement !== globeWrap) {
+                const wrapper = canvas.parentElement;
+                wrapper.parentElement.insertBefore(canvas, wrapper);
+                wrapper.remove();
+            }
+        }
+
+        function initGlobe() {
+            const size = getGlobeSize();
+            const dpr = window.devicePixelRatio || 2;
+            canvas.style.width = size + "px";
+            canvas.style.height = size + "px";
+            globe = createGlobe(canvas, {
+                devicePixelRatio: dpr,
+                width: size * dpr, height: size * dpr,
+                phi: phi, theta: currentTheta,
+                dark: globeConfig.dark, diffuse: 1.2, scale: 1,
+                mapSamples: 16000, mapBrightness: 6,
+                baseColor: globeConfig.baseColor,
+                markerColor: globeConfig.markerColor,
+                glowColor: globeConfig.glowColor,
+                markers: currentMarkers,
+            });
+            const cobeWrapper = canvas.parentElement;
+            if (cobeWrapper && cobeWrapper !== globeWrap) {
+                cobeWrapper.style.cssText = "position:relative;display:flex;align-items:center;justify-content:center;";
+            }
+        }
+
+        initGlobe();
+
+        function animate() {
+            if (autoRotate && !isDragging) phi += 0.003;
+            if (globe) globe.update({ phi: phi, theta: currentTheta });
+            requestAnimationFrame(animate);
+        }
+        requestAnimationFrame(animate);
+
+        let resizeTimer = null;
+        let lastGlobeSize = getGlobeSize();
+        const resizeObserver = new ResizeObserver(() => {
+            clearTimeout(resizeTimer);
+            resizeTimer = setTimeout(() => {
+                const newSize = getGlobeSize();
+                if (Math.abs(newSize - lastGlobeSize) < 5) return;
+                lastGlobeSize = newSize;
+                if (globe) { globe.destroy(); globe = null; }
+                cleanupCobeWrapper();
+                initGlobe();
+                resizeFxCanvas();
+            }, 150);
+        });
+        resizeObserver.observe(document.body);
+
+        // ================================================================
+        // DRAG + DOUBLE-CLICK
+        // ================================================================
+        let clickCount = 0, clickTimer = null, lastClickEvent = null;
+        let mouseDownPos = { x: 0, y: 0 };
+        let dragStarted = false, pointerY = 0;
+
+        globeWrap.addEventListener("mousedown", (e) => {
+            mouseDownPos = { x: e.clientX, y: e.clientY };
+            pointerX = e.clientX; pointerY = e.clientY;
+            dragStarted = false; isDragging = true; autoRotate = false;
+            e.preventDefault();
+        });
+
+        document.addEventListener("mousemove", (e) => {
+            if (!isDragging) return;
+            const dx = e.clientX - pointerX, dy = e.clientY - pointerY;
+            if (Math.abs(e.clientX - mouseDownPos.x) > 4 || Math.abs(e.clientY - mouseDownPos.y) > 4) dragStarted = true;
+            if (dragStarted) {
+                pointerX = e.clientX; pointerY = e.clientY;
+                phi += dx * 0.005;
+                currentTheta = Math.max(-1.2, Math.min(1.2, currentTheta + dy * 0.005));
+            }
+        });
+
+        document.addEventListener("mouseup", (e) => {
+            const wasDrag = dragStarted;
+            if (isDragging) {
+                isDragging = false; dragStarted = false;
+                setTimeout(() => { if (!isDragging) autoRotate = true; }, 3000);
+            }
+            if (!wasDrag) {
+                clickCount++; lastClickEvent = e;
+                if (clickCount === 1) {
+                    clickTimer = setTimeout(() => { clickCount = 0; lastClickEvent = null; }, 400);
+                } else if (clickCount >= 2) {
+                    clearTimeout(clickTimer); clickCount = 0;
+                    handleDoubleClick(lastClickEvent); lastClickEvent = null;
+                }
+            } else { clickCount = 0; clearTimeout(clickTimer); }
+        });
+
+        // ================================================================
+        // DOUBLE-CLICK HANDLER
+        // ================================================================
+        let currentLat = 51.5, currentLon = -0.1;
+
+        function handleDoubleClick(e) {
+            const rect = canvas.getBoundingClientRect();
+            const nx = (e.clientX - rect.left) / rect.width * 2 - 1;
+            const ny = (e.clientY - rect.top) / rect.height * 2 - 1;
+            const c = nx, s = -ny;
+            if (c * c + s * s > 0.64) return;
+            const hx = c / 0.8, hy = s / 0.8;
+            const hz = Math.sqrt(Math.max(0, 1 - hx * hx - hy * hy));
+            const cp = Math.cos(phi), sp = Math.sin(phi);
+            const ct = Math.cos(currentTheta), st = Math.sin(currentTheta);
+            const x = cp * hx + sp * st * hy - sp * ct * hz;
+            const y = ct * hy + st * hz;
+            const z = sp * hx - cp * st * hy + cp * ct * hz;
+            const lat = Math.asin(Math.max(-1, Math.min(1, y))) * (180 / Math.PI);
+            const lon = Math.atan2(-z, x) * (180 / Math.PI);
+            currentLat = lat; currentLon = lon;
+            const latProps = latState.properties, lonProps = lonState.properties;
+            latState.setNormalisedValue(Math.max(0, Math.min(1, (lat - latProps.start) / (latProps.end - latProps.start))));
+            lonState.setNormalisedValue(Math.max(0, Math.min(1, (lon - lonProps.start) / (lonProps.end - lonProps.start))));
+            latState.sliderDragEnded(); lonState.sliderDragEnded();
+            currentMarkers = [{ location: [lat, lon], size: 0.07 }];
+            if (globe) globe.update({ markers: currentMarkers });
+            reverseGeocode(lat, lon);
+            updateTimeOfDay();
+            document.getElementById("hint").classList.add("hidden");
+        }
+
+        // ================================================================
+        // INITIAL STATE
+        // ================================================================
+        function getLatLonFromRelays() {
+            const latNorm = latState.getNormalisedValue(), lonNorm = lonState.getNormalisedValue();
+            const latProps = latState.properties, lonProps = lonState.properties;
+            return {
+                lat: latProps.start + latNorm * (latProps.end - latProps.start),
+                lon: lonProps.start + lonNorm * (lonProps.end - lonProps.start),
+            };
+        }
+
+        setTimeout(() => {
+            const { lat, lon } = getLatLonFromRelays();
+            currentLat = lat; currentLon = lon;
+            currentMarkers = [{ location: [lat, lon], size: 0.07 }];
+            phi = -lon * (Math.PI / 180);
+            if (globe) globe.update({ markers: currentMarkers });
+            reverseGeocode(lat, lon);
+            updateTimeOfDay();
+        }, 500);
+
+        // ================================================================
+        // REVERSE GEOCODING
+        // ================================================================
+        let geocodeTimeout = null;
+        async function reverseGeocode(lat, lon) {
+            const label = document.getElementById("location-label");
+            label.textContent = lat.toFixed(2) + "\u00B0, " + lon.toFixed(2) + "\u00B0";
+            label.classList.add("visible");
+            clearTimeout(geocodeTimeout);
+            geocodeTimeout = setTimeout(async () => {
+                try {
+                    const resp = await fetch(
+                        "https://nominatim.openstreetmap.org/reverse?lat=" + lat + "&lon=" + lon + "&format=json",
+                        { headers: { "Accept-Language": "en", "User-Agent": "HowsTheWeather/2.0" } }
+                    );
+                    const data = await resp.json();
+                    if (data.address) {
+                        const city = data.address.city || data.address.town || data.address.village || data.address.state || "";
+                        const country = data.address.country || "";
+                        if (city || country) label.textContent = city ? (city + ", " + country) : country;
+                    }
+                } catch (e) { /* keep coords */ }
+            }, 300);
+        }
+
+        // ================================================================
+        // TIME-OF-DAY BACKGROUND
+        // ================================================================
+        let bgCurrent = { hue1: 220, hue2: 230, sat: 40, light1: 12, light2: 18 };
+        let bgTarget  = { hue1: 220, hue2: 230, sat: 40, light1: 12, light2: 18 };
+        let bgAnimating = false;
+
+        function lerpBg() {
+            const speed = 0.03;
+            let done = true;
+            for (const key of Object.keys(bgTarget)) {
+                const diff = bgTarget[key] - bgCurrent[key];
+                if (Math.abs(diff) > 0.1) { bgCurrent[key] += diff * speed; done = false; }
+                else bgCurrent[key] = bgTarget[key];
+            }
+            const s = document.body.style;
+            s.setProperty("--bg-hue1", bgCurrent.hue1.toFixed(1));
+            s.setProperty("--bg-hue2", bgCurrent.hue2.toFixed(1));
+            s.setProperty("--bg-sat", bgCurrent.sat.toFixed(1));
+            s.setProperty("--bg-light1", bgCurrent.light1.toFixed(1));
+            s.setProperty("--bg-light2", bgCurrent.light2.toFixed(1));
+            if (!done) requestAnimationFrame(lerpBg);
+            else bgAnimating = false;
+        }
+
+        function startBgLerp() {
+            if (!bgAnimating) { bgAnimating = true; requestAnimationFrame(lerpBg); }
+        }
+
+        const todColors = [
+            [0,220,230,35,8,12],[5,220,230,35,8,12],[5.5,30,40,70,30,40],
+            [6.5,35,45,80,45,55],[7.5,40,50,65,50,60],[8.5,200,210,55,60,70],
+            [12,200,215,60,68,75],[15,200,210,55,62,70],[16.5,30,20,65,50,55],
+            [17.5,20,10,75,42,48],[18.5,15,350,70,32,38],[19.5,270,260,45,22,28],
+            [20.5,240,235,40,14,20],[21.5,220,230,35,8,12],[24,220,230,35,8,12],
+        ];
+
+        function getSolarHour(lon) {
+            const now = new Date();
+            const utcH = now.getUTCHours() + now.getUTCMinutes() / 60 + now.getUTCSeconds() / 3600;
+            let h = (utcH + lon / 15) % 24;
+            if (h < 0) h += 24;
+            return h;
+        }
+
+        function interpolateTod(hour) {
+            for (let i = 0; i < todColors.length - 1; i++) {
+                const a = todColors[i], b = todColors[i + 1];
+                if (hour >= a[0] && hour < b[0]) {
+                    const t = (hour - a[0]) / (b[0] - a[0]);
+                    const st = t * t * (3 - 2 * t);
+                    return { hue1: a[1]+(b[1]-a[1])*st, hue2: a[2]+(b[2]-a[2])*st,
+                             sat: a[3]+(b[3]-a[3])*st, light1: a[4]+(b[4]-a[4])*st, light2: a[5]+(b[5]-a[5])*st };
+                }
+            }
+            return { hue1: 220, hue2: 230, sat: 35, light1: 8, light2: 12 };
+        }
+
+        function updateTimeOfDay() {
+            const colors = interpolateTod(getSolarHour(currentLon));
+            bgTarget.hue1 = colors.hue1; bgTarget.hue2 = colors.hue2;
+            bgTarget.sat = colors.sat; bgTarget.light1 = colors.light1; bgTarget.light2 = colors.light2;
+            startBgLerp();
+        }
+        setInterval(updateTimeOfDay, 30000);
+
+        // ================================================================
+        // RAIN PARTICLES + STATE SMOOTHING
+        // (clouds shader reads fxSmooth.{wind,cloud,windDir})
+        // ================================================================
+        const fxCanvas = document.getElementById("weather-fx");
+        const fxCtx = fxCanvas.getContext("2d");
+        function resizeFxCanvas() {
+            const dpr = window.devicePixelRatio || 1;
+            fxCanvas.width = window.innerWidth * dpr;
+            fxCanvas.height = window.innerHeight * dpr;
+            fxCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
+        }
+        resizeFxCanvas();
+        window.addEventListener("resize", resizeFxCanvas);
+
+        let rainDrops = [];
+        let fxWeather = { rain: 0, wind: 0, cloud: 0, windDir: 0 };
+        let fxSmooth  = { rain: 0, wind: 0, cloud: 0, windDir: 0 };
+
+        function tickFx() {
+            const speed = 0.05;
+            fxSmooth.rain  += (fxWeather.rain  - fxSmooth.rain)  * speed;
+            fxSmooth.wind  += (fxWeather.wind  - fxSmooth.wind)  * speed;
+            fxSmooth.cloud += (fxWeather.cloud - fxSmooth.cloud) * speed;
+            // Wind direction: shortest-arc lerp around the 360° wheel
+            let dDir = fxWeather.windDir - fxSmooth.windDir;
+            if (dDir > 180) dDir -= 360;
+            else if (dDir < -180) dDir += 360;
+            fxSmooth.windDir = (fxSmooth.windDir + dDir * speed + 360) % 360;
+
+            const w = window.innerWidth;
+            const h = window.innerHeight;
+
+            // Rain — populate / depopulate drops based on intensity (0–10mm → 0–120 drops)
+            const rainIntensity = Math.min(1, fxSmooth.rain / 5);
+            const targetRain = Math.floor(rainIntensity * 120);
+            while (rainDrops.length < targetRain) {
+                rainDrops.push({
+                    x: Math.random() * w,
+                    y: Math.random() * h,
+                    speed: 3 + Math.random() * 5,
+                    opacity: 0.3 + Math.random() * 0.4,
+                });
+            }
+            while (rainDrops.length > targetRain) rainDrops.pop();
+
+            // Draw rain
+            fxCtx.clearRect(0, 0, w, h);
+            for (let i = 0; i < rainDrops.length; i++) {
+                const d = rainDrops[i];
+                d.y += d.speed;
+                if (d.y > h) { d.y = -4; d.x = Math.random() * w; }
+                fxCtx.beginPath();
+                fxCtx.arc(d.x, d.y, 3 + Math.random() * 1.5, 0, Math.PI * 2);
+                fxCtx.fillStyle = "rgba(180,200,240," + Math.min(1, d.opacity + 0.3).toFixed(2) + ")";
+                fxCtx.fill();
+            }
+
+            requestAnimationFrame(tickFx);
+        }
+        requestAnimationFrame(tickFx);
+
+        // ================================================================
+        // WEATHER UPDATE
+        // ================================================================
+        let weatherNorms = { wind: 0.5, cloud: 0.5, pressure: 0.5, temp: 0.5, humidity: 0.5 };
+        let weatherValid = false;
+        const knobInstances = {};
+
+        window.__JUCE__.backend.addEventListener("weatherUpdate", (data) => {
+            if (!data.valid) return;
+            weatherValid = true;
+
+            const info = document.getElementById("weather-info");
+            const temp = typeof data.temp === "number" ? data.temp.toFixed(1) + "\u00B0C" : "--";
+            const hum = typeof data.humidity === "number" ? data.humidity.toFixed(0) + "%" : "--";
+            const wind = typeof data.wind === "number" ? data.wind.toFixed(1) + " km/h" : "--";
+            // Weather code fallback: codes 51-55 (drizzle), 61-65 (rain),
+            // 80-82 (showers), 95-99 (thunderstorms) indicate precipitation
+            const wc = typeof data.weatherCode === "number" ? data.weatherCode : 0;
+            const wcIsRain = (wc >= 51 && wc <= 55) || (wc >= 61 && wc <= 65) || (wc >= 80 && wc <= 82) || (wc >= 95 && wc <= 99);
+            let rainAmount = typeof data.rain === "number" ? data.rain : 0;
+
+            // If weather code says rain but precipitation reads 0, use a minimum
+            if (wcIsRain && rainAmount <= 0) {
+                if (wc >= 51 && wc <= 55) rainAmount = 0.2;       // drizzle
+                else if (wc >= 61 && wc <= 62) rainAmount = 0.5;  // light/moderate rain
+                else if (wc >= 63 && wc <= 65) rainAmount = 2.0;  // heavy rain
+                else if (wc >= 80 && wc <= 81) rainAmount = 1.0;  // showers
+                else if (wc === 82) rainAmount = 3.0;              // violent showers
+                else if (wc >= 95) rainAmount = 2.0;               // thunderstorms
+            }
+
+            let rainText;
+            if (rainAmount > 0) rainText = "  \u00B7  " + rainAmount.toFixed(1) + " mm rain";
+            else rainText = "  \u00B7  No rain";
+            info.textContent = temp + "  \u00B7  " + hum + " humidity  \u00B7  " + wind + " wind" + rainText;
+
+            weatherNorms.wind = data.windNorm || 0.5;
+            weatherNorms.cloud = data.cloudNorm || 0.5;
+            weatherNorms.pressure = data.pressureNorm || 0.5;
+            weatherNorms.temp = data.tempNorm || 0.5;
+            weatherNorms.humidity = data.humidityNorm || 0.5;
+
+            fxWeather.rain = rainAmount;
+            fxWeather.wind = data.windNorm || 0;
+            fxWeather.cloud = data.cloudNorm || 0;
+            if (typeof data.windDirection === "number") fxWeather.windDir = data.windDirection;
+
+            updateModulatedKnobs();
+        });
+
+        function updateModulatedKnobs() {
+            if (!weatherValid) {
+                for (const id of ["size", "density", "pitch", "position", "texture"]) {
+                    if (knobInstances[id]) knobInstances[id].updateUI(null);
+                }
+                if (knobInstances["feedback"]) knobInstances["feedback"].updateUI(null);
+                return;
+            }
+
+            const amountState = Juce.getSliderState("weather_amount");
+            const amount = amountState.properties.start + amountState.getNormalisedValue() * (amountState.properties.end - amountState.properties.start);
+
+            const sizeOffset = (weatherNorms.wind - 0.5) * 1.2 * amount;
+            const densityOffset = (weatherNorms.cloud - 0.5) * 1.2 * amount;
+            const pitchOffsetSt = (weatherNorms.pressure - 0.5) * 24.0 * amount;
+            const positionOffset = (weatherNorms.temp - 0.5) * 1.2 * amount;
+            const textureOffset = (weatherNorms.humidity - 0.5) * 1.2 * amount;
+
+            if (knobInstances["size"]) knobInstances["size"].updateUI(sizeOffset);
+            if (knobInstances["density"]) knobInstances["density"].updateUI(densityOffset);
+            if (knobInstances["position"]) knobInstances["position"].updateUI(positionOffset);
+            if (knobInstances["texture"]) knobInstances["texture"].updateUI(textureOffset);
+            if (knobInstances["feedback"]) knobInstances["feedback"].updateUI(null);
+
+            if (knobInstances["pitch"]) knobInstances["pitch"].updateUI(pitchOffsetSt);
+        }
+
+        // ================================================================
+        // PANELS & BUTTONS
+        // ================================================================
+        const paramsToggle = document.getElementById("params-toggle");
+        const paramsDrawer = document.getElementById("params-drawer");
+        const infoToggle = document.getElementById("info-toggle");
+        const infoPanel = document.getElementById("info-panel");
+        const freezeToggle = document.getElementById("freeze-toggle");
+
+        paramsToggle.addEventListener("click", () => {
+            const isOpen = paramsDrawer.classList.toggle("open");
+            paramsToggle.classList.toggle("open", isOpen);
+            paramsToggle.textContent = isOpen ? "Close" : "Params";
+            document.getElementById("preset-bar").classList.toggle("visible", isOpen);
+            if (isOpen) { infoPanel.classList.remove("open"); infoToggle.classList.remove("open"); infoToggle.textContent = "What's This?"; }
+        });
+        infoToggle.addEventListener("click", () => {
+            const isOpen = infoPanel.classList.toggle("open");
+            infoToggle.classList.toggle("open", isOpen);
+            infoToggle.textContent = isOpen ? "Close" : "What's This?";
+            if (isOpen) {
+                paramsDrawer.classList.remove("open");
+                paramsToggle.classList.remove("open");
+                paramsToggle.textContent = "Params";
+                document.getElementById("preset-bar").classList.remove("visible");
+            }
+        });
+
+        const freezeState = Juce.getToggleState("freeze");
+        function updateFreezeBtn() {
+            const frozen = freezeState.getValue();
+            freezeToggle.classList.toggle("active", frozen);
+            // Globe: white when frozen, light blue when not
+            const color = frozen ? [1, 1, 1] : [0.7, 0.85, 1];
+            globeConfig.baseColor = color;
+            globeConfig.glowColor = color;
+            if (globe) {
+                globe.destroy(); globe = null;
+                cleanupCobeWrapper();
+                initGlobe();
+            }
+        }
+        freezeToggle.addEventListener("click", () => { freezeState.setValue(!freezeState.getValue()); });
+        freezeState.valueChangedEvent.addListener(updateFreezeBtn);
+        updateFreezeBtn();
+
+        // ================================================================
+        // KNOB DRAWING
+        // ================================================================
+        function drawKnob(cvs, normalizedValue, modulatedNorm) {
+            const ctx = cvs.getContext("2d");
+            const w = cvs.width, h = cvs.height;
+            const cx = w / 2, cy = h / 2;
+            const r = Math.min(w, h) * 0.38;
+            ctx.clearRect(0, 0, w, h);
+            const startAngle = 0.75 * Math.PI, endAngle = 2.25 * Math.PI;
+
+            ctx.beginPath(); ctx.arc(cx, cy, r, startAngle, endAngle);
+            ctx.strokeStyle = "rgba(255,255,255,0.15)"; ctx.lineWidth = 3; ctx.lineCap = "round"; ctx.stroke();
+
+            const valAngle = startAngle + normalizedValue * (endAngle - startAngle);
+            ctx.beginPath(); ctx.arc(cx, cy, r, startAngle, valAngle);
+            ctx.strokeStyle = "rgba(100,200,255,0.9)"; ctx.lineWidth = 3; ctx.lineCap = "round"; ctx.stroke();
+            ctx.beginPath(); ctx.arc(cx + Math.cos(valAngle) * r, cy + Math.sin(valAngle) * r, 2.5, 0, Math.PI * 2);
+            ctx.fillStyle = "#fff"; ctx.fill();
+
+            if (modulatedNorm !== null && modulatedNorm !== undefined) {
+                const modAngle = startAngle + Math.max(0, Math.min(1, modulatedNorm)) * (endAngle - startAngle);
+                const a1 = Math.min(valAngle, modAngle);
+                const a2 = Math.max(valAngle, modAngle);
+                if (Math.abs(a2 - a1) > 0.001) {
+                    ctx.beginPath(); ctx.arc(cx, cy, r, a1, a2);
+                    ctx.strokeStyle = "rgba(255,180,60,0.95)"; ctx.lineWidth = 3; ctx.lineCap = "round"; ctx.stroke();
+                }
+                ctx.beginPath(); ctx.arc(cx + Math.cos(modAngle) * r, cy + Math.sin(modAngle) * r, 2.5, 0, Math.PI * 2);
+                ctx.fillStyle = "rgba(255,180,60,0.95)"; ctx.fill();
+            }
+        }
+
+        function setupKnob(canvasId, paramId, formatFn) {
+            const cvs = document.getElementById(canvasId);
+            const valueDisplay = document.getElementById("val-" + paramId);
+            const state = Juce.getSliderState(paramId);
+            let dragging = false, startY = 0, startValue = 0;
+
+            function updateUI(modulationOffset) {
+                const norm = state.getNormalisedValue();
+                let modNorm = null;
+                if (modulationOffset !== null && modulationOffset !== undefined) {
+                    const props = state.properties;
+                    const baseVal = props.start + norm * (props.end - props.start);
+                    const modVal = Math.max(props.start, Math.min(props.end, baseVal + modulationOffset));
+                    modNorm = (modVal - props.start) / (props.end - props.start);
+                }
+                drawKnob(cvs, norm, modNorm);
+                if (formatFn) { valueDisplay.textContent = formatFn(state); }
+                else {
+                    const props = state.properties;
+                    const val = props.start + norm * (props.end - props.start);
+                    valueDisplay.textContent = val.toFixed(val >= 10 || val <= -10 ? 1 : 2);
+                }
+            }
+
+            state.valueChangedEvent.addListener(() => updateUI(null));
+            cvs.addEventListener("mousedown", (e) => { dragging = true; startY = e.clientY; startValue = state.getNormalisedValue(); e.preventDefault(); });
+            window.addEventListener("mousemove", (e) => {
+                if (!dragging) return;
+                state.setNormalisedValue(Math.max(0, Math.min(1, startValue + (startY - e.clientY) * (e.shiftKey ? 0.001 : 0.005))));
+            });
+            window.addEventListener("mouseup", () => { if (dragging) { dragging = false; state.sliderDragEnded(); } });
+            cvs.addEventListener("dblclick", (e) => { e.stopPropagation(); state.setNormalisedValue(state.properties.defaultValue !== undefined ? state.properties.defaultValue : 0.5); });
+
+            updateUI(null);
+            return { state, updateUI };
+        }
+
+        // ================================================================
+        // SET UP ALL KNOBS
+        // ================================================================
+        const fmt01 = (s) => { const n = s.getNormalisedValue(), p = s.properties; return (p.start + n * (p.end - p.start)).toFixed(2); };
+        const fmtPitch = (s) => { const v = -24 + s.getNormalisedValue() * 48; return (v >= 0 ? "+" : "") + v.toFixed(1) + " st"; };
+
+        knobInstances["position"] = setupKnob("knob-position", "position", fmt01);
+        knobInstances["size"] = setupKnob("knob-size", "size", fmt01);
+        knobInstances["density"] = setupKnob("knob-density", "density", fmt01);
+        knobInstances["texture"] = setupKnob("knob-texture", "texture", fmt01);
+        knobInstances["pitch"] = setupKnob("knob-pitch", "pitch", fmtPitch);
+        knobInstances["feedback"] = setupKnob("knob-feedback", "feedback", fmt01);
+        setupKnob("knob-drywet", "drywet", fmt01);
+        setupKnob("knob-spread", "spread", fmt01);
+        setupKnob("knob-reverb", "reverb", fmt01);
+        setupKnob("knob-weather_amount", "weather_amount", fmt01);
+
+        // ================================================================
+        // PRESET BAR
+        // ================================================================
+        const presetBar = document.getElementById("preset-bar");
+        const presetSelect = document.getElementById("preset-select");
+        const presetPrev = document.getElementById("preset-prev");
+        const presetNext = document.getElementById("preset-next");
+        const presetSave = document.getElementById("preset-save");
+        const presetInput = document.getElementById("preset-input");
+        const presetConfirm = document.getElementById("preset-confirm");
+        const presetCancel = document.getElementById("preset-cancel");
+        const savePresetFn = Juce.getNativeFunction("savePreset");
+        const loadPresetFn = Juce.getNativeFunction("loadPreset");
+        const nextPresetFn = Juce.getNativeFunction("nextPreset");
+        const prevPresetFn = Juce.getNativeFunction("prevPreset");
+
+        let lastPresetCurrent = "";
+        let lastPresetList = "";
+
+        window.__JUCE__.backend.addEventListener("presetUpdate", (data) => {
+            const all = Array.isArray(data.all) ? data.all : [];
+            const current = data.current || "";
+            const listKey = all.join("\x1f");
+            if (listKey !== lastPresetList) {
+                lastPresetList = listKey;
+                presetSelect.innerHTML = "";
+                if (all.length === 0) {
+                    const opt = document.createElement("option");
+                    opt.textContent = "(no presets)";
+                    opt.value = "";
+                    presetSelect.appendChild(opt);
+                } else {
+                    for (const name of all) {
+                        const opt = document.createElement("option");
+                        opt.value = name;
+                        opt.textContent = name;
+                        presetSelect.appendChild(opt);
+                    }
+                }
+            }
+            if (current !== lastPresetCurrent) {
+                lastPresetCurrent = current;
+                if (current) presetSelect.value = current;
+            }
+        });
+
+        presetSelect.addEventListener("change", () => {
+            if (presetSelect.value) loadPresetFn(presetSelect.value);
+        });
+        presetPrev.addEventListener("click", () => prevPresetFn());
+        presetNext.addEventListener("click", () => nextPresetFn());
+
+        function openSaveMode() {
+            presetBar.classList.add("saving");
+            presetInput.value = "";
+            presetInput.focus();
+        }
+        function closeSaveMode() {
+            presetBar.classList.remove("saving");
+        }
+        function commitSave() {
+            const name = presetInput.value.trim();
+            if (name) savePresetFn(name);
+            closeSaveMode();
+        }
+        presetSave.addEventListener("click", openSaveMode);
+        presetConfirm.addEventListener("click", commitSave);
+        presetCancel.addEventListener("click", closeSaveMode);
+        presetInput.addEventListener("keydown", (e) => {
+            if (e.key === "Enter") commitSave();
+            else if (e.key === "Escape") closeSaveMode();
+        });
+
+        // ================================================================
+        // BUG REPORT
+        // ================================================================
+        const bugToggle = document.getElementById("bug-report-toggle");
+        const bugForm = document.getElementById("bug-report-form");
+        const bugText = document.getElementById("bug-report-text");
+        const bugSend = document.getElementById("bug-report-send");
+        const bugCancel = document.getElementById("bug-report-cancel");
+
+        bugToggle.addEventListener("click", () => {
+            bugForm.classList.toggle("open");
+            if (bugForm.classList.contains("open")) bugText.focus();
+        });
+        bugCancel.addEventListener("click", () => {
+            bugForm.classList.remove("open");
+            bugText.value = "";
+        });
+        const submitBugReportFn = Juce.getNativeFunction("submitBugReport");
+        const bugThanks = document.getElementById("bug-report-thanks");
+        bugSend.addEventListener("click", () => {
+            const body = bugText.value.trim();
+            if (!body) return;
+            submitBugReportFn(body);
+            bugForm.classList.remove("open");
+            bugText.value = "";
+            bugThanks.classList.add("open");
+            setTimeout(() => bugThanks.classList.remove("open"), 3000);
+        });
+
+        // ================================================================
+        // PROCEDURAL CLOUD SHADER — fBM noise + sun, full-window WebGL
+        // ================================================================
+        (function initCloudShader() {
+            const canvas = document.getElementById("cloud-canvas");
+            const gl = canvas.getContext("webgl") || canvas.getContext("experimental-webgl");
+            if (!gl) return; // graceful fallback: gradient body bg shows through
+
+            const VS = `
+                attribute vec2 a_pos;
+                void main() { gl_Position = vec4(a_pos, 0.0, 1.0); }
+            `;
+            const FS = `
+                precision mediump float;
+                uniform vec2  u_res;
+                uniform float u_time;
+                uniform float u_wind;
+                uniform vec2  u_windVec;
+                uniform float u_cloud;
+                uniform vec3  u_skyTop;
+                uniform vec3  u_skyHorizon;
+                uniform vec3  u_cloudColor;
+                uniform vec3  u_sunColor;
+                uniform float u_dayFactor;
+
+                // 2D hash + value noise
+                float hash(vec2 p) {
+                    p = fract(p * vec2(123.34, 456.21));
+                    p += dot(p, p + 45.32);
+                    return fract(p.x * p.y);
+                }
+                float noise(vec2 p) {
+                    vec2 i = floor(p);
+                    vec2 f = fract(p);
+                    f = f * f * (3.0 - 2.0 * f);
+                    float a = hash(i);
+                    float b = hash(i + vec2(1.0, 0.0));
+                    float c = hash(i + vec2(0.0, 1.0));
+                    float d = hash(i + vec2(1.0, 1.0));
+                    return mix(mix(a, b, f.x), mix(c, d, f.x), f.y);
+                }
+                float fbm(vec2 p) {
+                    float v = 0.0;
+                    float a = 0.5;
+                    for (int i = 0; i < 5; i++) {
+                        v += a * noise(p);
+                        p *= 2.02;
+                        a *= 0.5;
+                    }
+                    return v;
+                }
+
+                void main() {
+                    vec2 uv = gl_FragCoord.xy / u_res.xy;
+                    // Vertical gradient: horizon (bottom) → sky-top (top)
+                    vec3 sky = mix(u_skyHorizon, u_skyTop, smoothstep(0.0, 1.0, uv.y));
+
+                    // Sun: positioned dead-center, BEHIND the opaque globe.
+                    // Core is occluded; the soft glow halo bleeds out around the globe's edge.
+                    vec2 sunPos = vec2(0.5, 0.5);
+                    float sunDist = length((uv - sunPos) * vec2(u_res.x / u_res.y, 1.0));
+                    float sunCore = smoothstep(0.06, 0.03, sunDist);
+                    float sunGlow = smoothstep(0.55, 0.05, sunDist) * 0.45;
+                    sky += u_sunColor * (sunCore * 0.4 + sunGlow) * u_dayFactor;
+
+                    // Clouds: fBM noise advected in wind direction at wind speed
+                    vec2 cp = uv * vec2(u_res.x / u_res.y, 1.0) * 2.5;
+                    // u_windVec carries direction (unit) * speed (0..1). No wind = no motion.
+                    cp += u_windVec * u_time * 0.25;
+                    float n = fbm(cp);
+                    // Second slower depth layer drifts in same direction at half speed
+                    float n2 = fbm(cp * 0.5 + u_windVec * u_time * 0.05);
+                    n = n * 0.7 + n2 * 0.3;
+                    // Concentrate clouds toward upper portion
+                    float verticalMask = smoothstep(0.05, 0.55, uv.y);
+                    // Cloud cover threshold: clear sky when u_cloud≈0, dense when u_cloud≈1
+                    float threshold = mix(1.05, 0.32, u_cloud);
+                    float cloud = smoothstep(threshold, threshold + 0.18, n) * verticalMask;
+                    // Hard gate: zero clouds below ~5% cloud cover (clear sky stays clear)
+                    cloud *= smoothstep(0.04, 0.15, u_cloud);
+
+                    // Cloud shading: brighter on top, shadow underneath
+                    float shade = 0.7 + 0.3 * smoothstep(0.0, 0.6, n);
+                    vec3 cloudShaded = u_cloudColor * shade;
+
+                    vec3 col = mix(sky, cloudShaded, cloud * 0.92);
+                    gl_FragColor = vec4(col, 1.0);
+                }
+            `;
+
+            function compile(type, src) {
+                const sh = gl.createShader(type);
+                gl.shaderSource(sh, src);
+                gl.compileShader(sh);
+                if (!gl.getShaderParameter(sh, gl.COMPILE_STATUS)) {
+                    console.error("Shader compile error:", gl.getShaderInfoLog(sh));
+                    gl.deleteShader(sh);
+                    return null;
+                }
+                return sh;
+            }
+            const vs = compile(gl.VERTEX_SHADER, VS);
+            const fs = compile(gl.FRAGMENT_SHADER, FS);
+            if (!vs || !fs) return;
+            const prog = gl.createProgram();
+            gl.attachShader(prog, vs);
+            gl.attachShader(prog, fs);
+            gl.linkProgram(prog);
+            if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) {
+                console.error("Program link error:", gl.getProgramInfoLog(prog));
+                return;
+            }
+            gl.useProgram(prog);
+
+            const buf = gl.createBuffer();
+            gl.bindBuffer(gl.ARRAY_BUFFER, buf);
+            gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 3, -1, -1, 3]), gl.STATIC_DRAW);
+            const aPos = gl.getAttribLocation(prog, "a_pos");
+            gl.enableVertexAttribArray(aPos);
+            gl.vertexAttribPointer(aPos, 2, gl.FLOAT, false, 0, 0);
+
+            const uRes        = gl.getUniformLocation(prog, "u_res");
+            const uTime       = gl.getUniformLocation(prog, "u_time");
+            const uWind       = gl.getUniformLocation(prog, "u_wind");
+            const uWindVec    = gl.getUniformLocation(prog, "u_windVec");
+            const uCloud      = gl.getUniformLocation(prog, "u_cloud");
+            const uSkyTop     = gl.getUniformLocation(prog, "u_skyTop");
+            const uSkyHorizon = gl.getUniformLocation(prog, "u_skyHorizon");
+            const uCloudColor = gl.getUniformLocation(prog, "u_cloudColor");
+            const uSunColor   = gl.getUniformLocation(prog, "u_sunColor");
+            const uDayFactor  = gl.getUniformLocation(prog, "u_dayFactor");
+
+            function hslToRgb01(h, s, l) {
+                h = ((h % 360) + 360) % 360;
+                s = Math.max(0, Math.min(100, s)) / 100;
+                l = Math.max(0, Math.min(100, l)) / 100;
+                const k = n => (n + h / 30) % 12;
+                const a = s * Math.min(l, 1 - l);
+                const f = n => l - a * Math.max(-1, Math.min(k(n) - 3, Math.min(9 - k(n), 1)));
+                return [f(0), f(8), f(4)];
+            }
+
+            function resize() {
+                const dpr = Math.min(window.devicePixelRatio || 1, 2);
+                canvas.width  = Math.floor(window.innerWidth  * dpr);
+                canvas.height = Math.floor(window.innerHeight * dpr);
+                gl.viewport(0, 0, canvas.width, canvas.height);
+            }
+            resize();
+            window.addEventListener("resize", resize);
+
+            const t0 = performance.now();
+            function render() {
+                const t = (performance.now() - t0) / 1000;
+                gl.uniform2f(uRes, canvas.width, canvas.height);
+                gl.uniform1f(uTime, t);
+                gl.uniform1f(uWind, fxSmooth.wind);
+                // Wind direction (degrees) → unit vector. Open-Meteo returns "from" angle (meteorological);
+                // clouds visually move TOWARD the destination (= dir + 180°). 0°=N at top, 90°=E to the right.
+                const dirRad = ((fxSmooth.windDir + 180) % 360) * Math.PI / 180;
+                const wx =  Math.sin(dirRad);          // east-west: sin(0°)=0, sin(90°)=1
+                const wy = -Math.cos(dirRad);          // north-south: -cos(0°)=-1 (toward bottom = south)
+                // Scale by wind magnitude (so no wind → no motion)
+                gl.uniform2f(uWindVec, wx * fxSmooth.wind, wy * fxSmooth.wind);
+                gl.uniform1f(uCloud, fxSmooth.cloud);
+                // Sky colors from time-of-day HSL state
+                const top = hslToRgb01(bgCurrent.hue1, bgCurrent.sat, Math.min(70, bgCurrent.light1 + 30));
+                const hor = hslToRgb01(bgCurrent.hue2, bgCurrent.sat * 0.8, Math.min(80, bgCurrent.light2 + 20));
+                const cld = hslToRgb01(bgCurrent.hue1, bgCurrent.sat * 0.25, Math.min(92, bgCurrent.light1 + 60));
+                gl.uniform3f(uSkyTop,     top[0], top[1], top[2]);
+                gl.uniform3f(uSkyHorizon, hor[0], hor[1], hor[2]);
+                gl.uniform3f(uCloudColor, cld[0], cld[1], cld[2]);
+                const dayFactor = Math.max(0, Math.min(1, (bgCurrent.light1 - 5) / 50));
+                gl.uniform1f(uDayFactor, dayFactor);
+                // Sun: warm orange day → faded night
+                const sunR = 1.0  * dayFactor + 0.2 * (1 - dayFactor);
+                const sunG = 0.75 * dayFactor + 0.25 * (1 - dayFactor);
+                const sunB = 0.45 * dayFactor + 0.30 * (1 - dayFactor);
+                gl.uniform3f(uSunColor, sunR, sunG, sunB);
+
+                gl.drawArrays(gl.TRIANGLES, 0, 3);
+                requestAnimationFrame(render);
+            }
+            render();
+        })();
+    </script>
+</body>
+</html>

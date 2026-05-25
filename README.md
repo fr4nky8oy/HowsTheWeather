@@ -6,7 +6,11 @@ A granular audio effect plugin that listens to the real world. Live weather data
 
 ## Inspiration
 
-Built as a love letter to **Mutable Instruments Clouds** — the granular processing mode in particular — paired with the free **Open-Meteo** weather API. Clouds gave the world a granular voice; HowsTheWeather lets the actual weather conduct it.
+In 1821, **John Constable** spent the summer on Hampstead Heath painting nothing but skies — dozens of small oil studies of clouds, light, and weather, made *en plein air* with the date, time, and wind direction often noted on the back. He wasn't painting landscapes that happened to have skies; he was painting the sky itself, treating weather as the subject.
+
+That story is the seed of this plugin. What if Constable's cloud studies could be turned into a sound generator? Take real-time atmospheric data (the same wind, light, and pressure he was watching), feed it into the **Mutable Instruments Clouds**-style granular engine, wrap the whole thing in an interactive globe UI — and your audio becomes a granular response to whatever the sky is doing, right now, anywhere on Earth.
+
+Constable provided the conceptual frame. Clouds provided the granular voice. Open-Meteo provides the live weather. HowsTheWeather is what falls out when you bolt them together.
 
 ## How It Works
 

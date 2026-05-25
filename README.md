@@ -1,4 +1,4 @@
-# HowsTheWeather
+# How's The Weather
 
 ![HowsTheWeather main view](Pic/Pic1.jpg)
 
